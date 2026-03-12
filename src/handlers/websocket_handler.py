@@ -274,7 +274,9 @@ class WebSocketHandler:
             if interim_result:
                 await self._send_transcription_text(interim_result)
 
-        await self._check_auto_commit(current_time)
+        # 在VAD模式下禁用自动提交，因为VAD会自动检测语音边界
+        if not self.vad_enabled:
+            await self._check_auto_commit(current_time)
 
     async def _process_vad(self, audio_chunk: np.ndarray):
         if self.vad_manager is None:
@@ -313,10 +315,12 @@ class WebSocketHandler:
 
         self.speech_active = False
 
+        # 立即发送speech_stopped消息
         await self._send_event(
             create_speech_stopped_event(audio_end_ms=audio_end_ms, item_id=self.current_item_id)
         )
 
+        # 然后执行_commit_audio进行ASR推理
         await self._commit_audio()
 
     async def _handle_audio_commit(self, message: Dict[str, Any]):

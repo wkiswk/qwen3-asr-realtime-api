@@ -41,8 +41,7 @@ class ASRSession:
             raise RuntimeError("ASR model not loaded")
 
         try:
-            self.state = await asyncio.to_thread(
-                self.asr_manager.init_streaming_state,
+            self.state = await self.asr_manager.init_streaming_state(
                 context="",
                 language=self.language,
                 unfixed_chunk_num=2,
@@ -72,8 +71,8 @@ class ASRSession:
             try:
                 pcm16k = self._ensure_16k_mono(audio_chunk)
 
-                self.state = await asyncio.to_thread(
-                    self.asr_manager.streaming_transcribe, pcm16k=pcm16k, state=self.state
+                self.state = await self.asr_manager.streaming_transcribe(
+                    pcm16k=pcm16k, state=self.state
                 )
 
                 self._call_count += 1
@@ -133,8 +132,8 @@ class ASRSession:
 
         async with self._lock:
             try:
-                self.state = await asyncio.to_thread(
-                    self.asr_manager.finish_streaming_transcribe, state=self.state
+                self.state = await self.asr_manager.finish_streaming_transcribe(
+                    state=self.state
                 )
 
                 logger.info(f"[final] language={self.state.language!r} text_len={len(self.state.text)}")

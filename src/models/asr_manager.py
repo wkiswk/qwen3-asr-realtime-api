@@ -29,6 +29,8 @@ class ASRManager:
         self.gpu_memory_utilization: float = float(os.getenv("GPU_MEMORY_UTILIZATION", "0.5"))
         self.max_new_tokens: int = int(os.getenv("MAX_NEW_TOKENS", "64"))
         self.dtype: str = os.getenv("MODEL_DTYPE", "auto")
+        # 添加全局锁，确保模型推理的线程安全
+        self._lock = asyncio.Lock()
 
     async def load_model(self):
         """
@@ -90,7 +92,7 @@ class ASRManager:
     def is_ready(self) -> bool:
         return self.model is not None
 
-    def init_streaming_state(
+    async def init_streaming_state(
         self,
         context: str = "",
         language: Optional[str] = None,
@@ -111,15 +113,17 @@ class ASRManager:
         if self.model is None:
             raise RuntimeError("Model not loaded")
 
-        return self.model.init_streaming_state(
-            context=context,
-            language=language,
-            unfixed_chunk_num=unfixed_chunk_num,
-            unfixed_token_num=unfixed_token_num,
-            chunk_size_sec=chunk_size_sec,
-        )
+        async with self._lock:
+            return await asyncio.to_thread(
+                self.model.init_streaming_state,
+                context=context,
+                language=language,
+                unfixed_chunk_num=unfixed_chunk_num,
+                unfixed_token_num=unfixed_token_num,
+                chunk_size_sec=chunk_size_sec,
+            )
 
-    def streaming_transcribe(self, pcm16k: Any, state: Any) -> Any:
+    async def streaming_transcribe(self, pcm16k: Any, state: Any) -> Any:
         """
         Perform streaming transcription on audio chunk.
 
@@ -133,9 +137,12 @@ class ASRManager:
         if self.model is None:
             raise RuntimeError("Model not loaded")
 
-        return self.model.streaming_transcribe(pcm16k, state)
+        async with self._lock:
+            return await asyncio.to_thread(
+                self.model.streaming_transcribe, pcm16k, state
+            )
 
-    def finish_streaming_transcribe(self, state: Any) -> Any:
+    async def finish_streaming_transcribe(self, state: Any) -> Any:
         """
         Finish streaming transcription and process remaining audio.
 
@@ -148,4 +155,7 @@ class ASRManager:
         if self.model is None:
             raise RuntimeError("Model not loaded")
 
-        return self.model.finish_streaming_transcribe(state)
+        async with self._lock:
+            return await asyncio.to_thread(
+                self.model.finish_streaming_transcribe, state
+            )
